@@ -1,0 +1,462 @@
+{
+  "pool": {
+    "polling_interval_seconds": 15,
+    "maximum_research_minutes": 60,
+    "maximum_pool_size": 100,
+    "entry_required_score": 4,
+    "discovery_endpoint": "token-boosts/latest/v1",
+    "chain": "solana",
+    "max_candidates_per_poll": 60
+  },
+    {
+      "id": "min_market_cap",
+      "label": "Min Market Cap",
+      "metric": "marketCap",
+      "operator": ">=",
+      "value": 25000,
+      "enabled": true
+    },
+    {
+      "id": "min_liquidity",
+      "label": "Min Liquidity",
+      "metric": "liquidityUsd",
+      "operator": ">=",
+      "value": 10000,
+      "enabled": true
+    },
+    {
+      "id": "min_volume_mc",
+      "label": "Min Volume / MC",
+      "metric": "volumeMcRatio",
+      "operator": ">=",
+      "value": 1,
+      "enabled": true
+    },
+    {
+      "id": "min_txns",
+      "label": "Min Transactions",
+      "metric": "txns",
+      "operator": ">=",
+      "value": 10,
+      "enabled": true
+    },
+    {
+      "id": "min_buys",
+      "label": "Min Buys",
+      "metric": "buys",
+      "operator": ">=",
+      "value": 5,
+      "enabled": true
+    },
+    {
+      "id": "max_sells",
+      "label": "Max Sells",
+      "metric": "sells",
+      "operator": "<=",
+      "value": 20,
+      "enabled": true
+    }
+  ],
+
+  "timeframes": [
+    {
+      "id": "0-5m",
+      "label": "0–5m",
+      "start_minute": 0,
+      "end_minute": 5,
+      "required_score": 3,
+      "rules": [
+        {
+          "id": "mc_growth",
+          "label": "MC Growth %",
+          "metric": "mcGrowth",
+          "operator": ">=",
+          "value": 0,
+          "enabled": true
+        },
+        {
+          "id": "liq_growth",
+          "label": "Liquidity Growth %",
+          "metric": "liquidityGrowth",
+          "operator": ">=",
+          "value": 0,
+          "enabled": true
+        },
+        {
+          "id": "vol_growth",
+          "label": "Volume Growth %",
+          "metric": "volumeGrowth",
+          "operator": ">=",
+          "value": 0,
+          "enabled": true
+        },
+        {
+          "id": "mc_pullback",
+          "label": "MC Pullback %",
+          "metric": "mcPullbackAbs",
+          "operator": "<=",
+          "value": 0,
+          "enabled": true
+        },
+        {
+          "id": "liq_pullback",
+          "label": "Liquidity Pullback %",
+          "metric": "liquidityPullbackAbs",
+          "operator": "<=",
+          "value": 0,
+          "enabled": true
+        }
+      ]
+    },
+
+    {
+      "id": "5-10m",
+      "label": "5–10m",
+      "start_minute": 5,
+      "end_minute": 10,
+      "required_score": 3,
+      "rules": [
+        {
+          "id": "mc_growth",
+          "label": "MC Growth %",
+          "metric": "mcGrowth",
+          "operator": ">=",
+          "value": -35.8,
+          "enabled": true
+        },
+        {
+          "id": "liq_growth",
+          "label": "Liquidity Growth %",
+          "metric": "liquidityGrowth",
+          "operator": ">=",
+          "value": -6.2,
+          "enabled": true
+        },
+        {
+          "id": "vol_growth",
+          "label": "Volume Growth %",
+          "metric": "volumeGrowth",
+          "operator": ">=",
+          "value": 27.7,
+          "enabled": true
+        },
+        {
+          "id": "mc_pullback",
+          "label": "MC Pullback %",
+          "metric": "mcPullbackAbs",
+          "operator": "<=",
+          "value": 10.9,
+          "enabled": true
+        },
+        {
+          "id": "liq_pullback",
+          "label": "Liquidity Pullback %",
+          "metric": "liquidityPullbackAbs",
+          "operator": "<=",
+          "value": 6.2,
+          "enabled": true
+        }
+      ]
+    },
+
+    {
+      "id": "10-15m",
+      "label": "10–15m",
+      "start_minute": 10,
+      "end_minute": 15,
+      "required_score": 3,
+      "rules": [
+        {
+          "id": "mc_growth",
+          "label": "MC Growth %",
+          "metric": "mcGrowth",
+          "operator": ">=",
+          "value": -6.4,
+          "enabled": true
+        },
+        {
+          "id": "liq_growth",
+          "label": "Liquidity Growth %",
+          "metric": "liquidityGrowth",
+          "operator": ">=",
+          "value": -6.8,
+          "enabled": true
+        },
+        {
+          "id": "vol_growth",
+          "label": "Volume Growth %",
+          "metric": "volumeGrowth",
+          "operator": ">=",
+          "value": 43,
+          "enabled": true
+        },
+        {
+          "id": "mc_pullback",
+          "label": "MC Pullback %",
+          "metric": "mcPullbackAbs",
+          "operator": "<=",
+          "value": 6.4,
+          "enabled": true
+        },
+        {
+          "id": "liq_pullback",
+          "label": "Liquidity Pullback %",
+          "metric": "liquidityPullbackAbs",
+          "operator": "<=",
+          "value": 6.8,
+          "enabled": true
+        }
+      ]
+    },
+
+    {
+      "id": "15-20m",
+      "label": "15–20m",
+      "start_minute": 15,
+      "end_minute": 20,
+      "required_score": 3,
+      "rules": [
+        {
+          "id": "mc_growth",
+          "label": "MC Growth %",
+          "metric": "mcGrowth",
+          "operator": ">=",
+          "value": 27.3,
+          "enabled": true
+        },
+        {
+          "id": "liq_growth",
+          "label": "Liquidity Growth %",
+          "metric": "liquidityGrowth",
+          "operator": ">=",
+          "value": -10,
+          "enabled": true
+        },
+        {
+          "id": "vol_growth",
+          "label": "Volume Growth %",
+          "metric": "volumeGrowth",
+          "operator": ">=",
+          "value": 63.4,
+          "enabled": true
+        },
+        {
+          "id": "mc_pullback",
+          "label": "MC Pullback %",
+          "metric": "mcPullbackAbs",
+          "operator": "<=",
+          "value": 11.4,
+          "enabled": true
+        },
+        {
+          "id": "liq_pullback",
+          "label": "Liquidity Pullback %",
+          "metric": "liquidityPullbackAbs",
+          "operator": "<=",
+          "value": 5.6,
+          "enabled": true
+        }
+      ]
+    },
+
+    {
+      "id": "20-30m",
+      "label": "20–30m",
+      "start_minute": 20,
+      "end_minute": 30,
+      "required_score": 3,
+      "rules": [
+        {
+          "id": "mc_growth",
+          "label": "MC Growth %",
+          "metric": "mcGrowth",
+          "operator": ">=",
+          "value": 25.7,
+          "enabled": true
+        },
+        {
+          "id": "liq_growth",
+          "label": "Liquidity Growth %",
+          "metric": "liquidityGrowth",
+          "operator": ">=",
+          "value": -6.2,
+          "enabled": true
+        },
+        {
+          "id": "vol_growth",
+          "label": "Volume Growth %",
+          "metric": "volumeGrowth",
+          "operator": ">=",
+          "value": 61.4,
+          "enabled": true
+        },
+        {
+          "id": "mc_pullback",
+          "label": "MC Pullback %",
+          "metric": "mcPullbackAbs",
+          "operator": "<=",
+          "value": 26.4,
+          "enabled": true
+        },
+        {
+          "id": "liq_pullback",
+          "label": "Liquidity Pullback %",
+          "metric": "liquidityPullbackAbs",
+          "operator": "<=",
+          "value": 14.7,
+          "enabled": true
+        }
+      ]
+    },
+
+    {
+      "id": "30-40m",
+      "label": "30–40m",
+      "start_minute": 30,
+      "end_minute": 40,
+      "required_score": 3,
+      "rules": [
+        {
+          "id": "mc_growth",
+          "label": "MC Growth %",
+          "metric": "mcGrowth",
+          "operator": ">=",
+          "value": 0,
+          "enabled": true
+        },
+        {
+          "id": "liq_growth",
+          "label": "Liquidity Growth %",
+          "metric": "liquidityGrowth",
+          "operator": ">=",
+          "value": 0,
+          "enabled": true
+        },
+        {
+          "id": "vol_growth",
+          "label": "Volume Growth %",
+          "metric": "volumeGrowth",
+          "operator": ">=",
+          "value": 0,
+          "enabled": true
+        },
+        {
+          "id": "mc_pullback",
+          "label": "MC Pullback %",
+          "metric": "mcPullbackAbs",
+          "operator": "<=",
+          "value": 35.7,
+          "enabled": true
+        },
+        {
+          "id": "liq_pullback",
+          "label": "Liquidity Pullback %",
+          "metric": "liquidityPullbackAbs",
+          "operator": "<=",
+          "value": 21,
+          "enabled": true
+        }
+      ]
+    },
+
+    {
+      "id": "40-50m",
+      "label": "40–50m",
+      "start_minute": 40,
+      "end_minute": 50,
+      "required_score": 3,
+      "rules": [
+        {
+          "id": "mc_growth",
+          "label": "MC Growth %",
+          "metric": "mcGrowth",
+          "operator": ">=",
+          "value": 13.8,
+          "enabled": true
+        },
+        {
+          "id": "liq_growth",
+          "label": "Liquidity Growth %",
+          "metric": "liquidityGrowth",
+          "operator": ">=",
+          "value": 13.8,
+          "enabled": true
+        },
+        {
+          "id": "vol_growth",
+          "label": "Volume Growth %",
+          "metric": "volumeGrowth",
+          "operator": ">=",
+          "value": 94.3,
+          "enabled": true
+        },
+        {
+          "id": "mc_pullback",
+          "label": "MC Pullback %",
+          "metric": "mcPullbackAbs",
+          "operator": "<=",
+          "value": 37.2,
+          "enabled": true
+        },
+        {
+          "id": "liq_pullback",
+          "label": "Liquidity Pullback %",
+          "metric": "liquidityPullbackAbs",
+          "operator": "<=",
+          "value": 22,
+          "enabled": true
+        }
+      ]
+    },
+
+    {
+      "id": "50-60m",
+      "label": "50–60m",
+      "start_minute": 50,
+      "end_minute": 60,
+      "required_score": 3,
+      "rules": [
+        {
+          "id": "mc_growth",
+          "label": "MC Growth %",
+          "metric": "mcGrowth",
+          "operator": ">=",
+          "value": 31.2,
+          "enabled": true
+        },
+        {
+          "id": "liq_growth",
+          "label": "Liquidity Growth %",
+          "metric": "liquidityGrowth",
+          "operator": ">=",
+          "value": 0,
+          "enabled": true
+        },
+        {
+          "id": "vol_growth",
+          "label": "Volume Growth %",
+          "metric": "volumeGrowth",
+          "operator": ">=",
+          "value": 116.6,
+          "enabled": true
+        },
+        {
+          "id": "mc_pullback",
+          "label": "MC Pullback %",
+          "metric": "mcPullbackAbs",
+          "operator": "<=",
+          "value": 44.7,
+          "enabled": true
+        },
+        {
+          "id": "liq_pullback",
+          "label": "Liquidity Pullback %",
+          "metric": "liquidityPullbackAbs",
+          "operator": "<=",
+          "value": 27.1,
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}
