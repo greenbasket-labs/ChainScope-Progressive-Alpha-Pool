@@ -609,3 +609,620 @@ export async function searchDexScreener(
 
   return response.json();
 }
+/*
+ * ============================================================
+ * CHAINSCOPE OBSERVER API
+ * ============================================================
+ *
+ * ADDITIVE API LAYER
+ *
+ * These functions only retrieve Observer research
+ * produced by the backend/research engine.
+ *
+ * They do NOT:
+ *
+ * - calculate grades
+ * - calculate PATH
+ * - calculate evidence
+ * - modify observations
+ * - invent missing timeframes
+ *
+ * The research engine remains the source of truth.
+ *
+ * ============================================================
+ */
+
+import type {
+  ObserverEvidence,
+  ObserverPerformance,
+  TimeframeResult,
+} from './types';
+
+/*
+ * ============================================================
+ * OBSERVER TOKEN RESPONSE
+ * ============================================================
+ */
+
+export interface ObserverTokenResponse {
+  tokenAddress: string;
+
+  pairAddress: string;
+
+  dexId: string;
+
+  firstSeenAt: number;
+
+  discoverySources: string[];
+
+  entryScore: {
+    passed: number;
+    total: number;
+    required: number;
+    qualified: boolean;
+  } | null;
+
+  observations: Array<{
+    ageMinutes: number;
+
+    timeframeId: string;
+
+    observerEvidence:
+      ObserverEvidence[];
+
+    observerPerformance:
+      ObserverPerformance;
+
+    marketCap:
+      number | null;
+
+    liquidityUsd:
+      number | null;
+
+    volume:
+      number | null;
+
+    buys:
+      number | null;
+
+    sells:
+      number | null;
+
+    txns:
+      number | null;
+
+    priceUsd:
+      number | null;
+
+    pairAddress:
+      string;
+
+    dexId:
+      string;
+
+    fetchedAt:
+      number;
+
+    mcGrowth:
+      number | null;
+
+    liquidityGrowth:
+      number | null;
+
+    volumeGrowth:
+      number | null;
+
+    mcPullback:
+      number | null;
+
+    liquidityPullback:
+      number | null;
+
+    mcPullbackAbs:
+      number | null;
+
+    liquidityPullbackAbs:
+      number | null;
+
+    peakMarketCap:
+      number | null;
+
+    peakLiquidity:
+      number | null;
+
+    peakVolume:
+      number | null;
+  }>;
+
+  timeframeResults:
+    Record<
+      string,
+      TimeframeResult
+    >;
+
+  status:
+    'ACTIVE' |
+    'EXPIRED';
+
+  currentTimeframeId:
+    string;
+
+  /*
+   * Permanent historical PATH.
+   *
+   * The backend provides this.
+   * The frontend does not calculate it.
+   */
+
+  path?: string | null;
+}
+
+/*
+ * ============================================================
+ * OBSERVER LIST RESPONSE
+ * ============================================================
+ */
+
+export interface ObserverTokenSummary {
+  tokenAddress: string;
+
+  pairAddress:
+    string;
+
+  dexId:
+    string;
+
+  firstSeenAt:
+    number;
+
+  discoverySources:
+    string[];
+
+  entryScore:
+    ObserverTokenResponse[
+      'entryScore'
+    ];
+
+  status:
+    'ACTIVE' |
+    'EXPIRED';
+
+  currentTimeframeId:
+    string;
+
+  path?:
+    string | null;
+}
+
+/*
+ * ============================================================
+ * FETCH OBSERVER TOKEN
+ * ============================================================
+ *
+ * Retrieves the complete research record.
+ *
+ * ============================================================
+ */
+
+export async function fetchObserverToken(
+  address: string
+): Promise<
+  ObserverTokenResponse
+> {
+  const response =
+    await fetch(
+      '/api/observer/token/' +
+        encodeURIComponent(
+          address
+        ),
+      {
+        cache:
+          'no-store',
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      await response.text()
+    );
+  }
+
+  return response.json();
+}
+
+/*
+ * ============================================================
+ * FETCH OBSERVER TOKENS
+ * ============================================================
+ *
+ * Retrieves the current research pool/list.
+ *
+ * ============================================================
+ */
+
+export async function fetchObserverTokens(): Promise<
+  ObserverTokenSummary[]
+> {
+  const response =
+    await fetch(
+      '/api/observer/tokens',
+      {
+        cache:
+          'no-store',
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      await response.text()
+    );
+  }
+
+  const data =
+    await response.json();
+
+  /*
+   * Accept either:
+   *
+   * [
+   *   ...
+   * ]
+   *
+   * or:
+   *
+   * {
+   *   tokens: [...]
+   * }
+   */
+
+  if (
+    Array.isArray(data)
+  ) {
+    return data;
+  }
+
+  return Array.isArray(
+    data?.tokens
+  )
+    ? data.tokens
+    : [];
+}
+
+/*
+ * ============================================================
+ * FETCH OBSERVER RULES
+ * ============================================================
+ *
+ * This allows the UI to display the actual rules
+ * being used by the research engine.
+ *
+ * ============================================================
+ */
+
+export async function fetchObserverRules() {
+  const response =
+    await fetch(
+      '/api/observer/rules',
+      {
+        cache:
+          'no-store',
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      await response.text()
+    );
+  }
+
+  return response.json();
+}
+
+/*
+ * ============================================================
+ * FETCH OBSERVER HEALTH
+ * ============================================================
+ */
+
+export async function fetchObserverHealth() {
+  const response =
+    await fetch(
+      '/api/observer/health',
+      {
+        cache:
+          'no-store',
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      await response.text()
+    );
+  }
+
+  return response.json();
+}
+
+/*
+ * ============================================================
+ * FETCH OBSERVER TIMEFRAME
+ * ============================================================
+ *
+ * Retrieves one permanent timeframe result.
+ *
+ * No calculation occurs here.
+ *
+ * ============================================================
+ */
+
+export async function fetchObserverTimeframe(
+  address: string,
+  timeframeId: string
+): Promise<
+  TimeframeResult | null
+> {
+  const token =
+    await fetchObserverToken(
+      address
+    );
+
+  return (
+    token.timeframeResults?.[
+      timeframeId
+    ] ?? null
+  );
+}
+
+/*
+ * ============================================================
+ * FETCH OBSERVER EVIDENCE
+ * ============================================================
+ *
+ * Convenience helper.
+ *
+ * Evidence comes directly from the
+ * finalized research record.
+ *
+ * ============================================================
+ */
+
+export async function fetchObserverEvidence(
+  address: string,
+  timeframeId?: string
+): Promise<
+  ObserverEvidence[]
+> {
+  const token =
+    await fetchObserverToken(
+      address
+    );
+
+  /*
+   * Specific timeframe requested.
+   */
+
+  if (
+    timeframeId
+  ) {
+    const result =
+      token.timeframeResults?.[
+        timeframeId
+      ];
+
+    return (
+      result?.observerEvidence ??
+      []
+    );
+  }
+
+  /*
+   * Otherwise combine evidence from
+   * all finalized timeframes.
+   */
+
+  const output:
+    ObserverEvidence[] =
+    [];
+
+  for (
+    const result of Object.values(
+      token.timeframeResults ?? {}
+    )
+  ) {
+    if (
+      result.observerEvidence
+    ) {
+      output.push(
+        ...result.observerEvidence
+      );
+    }
+  }
+
+  return output;
+}
+
+/*
+ * ============================================================
+ * FETCH OBSERVER PERFORMANCE
+ * ============================================================
+ *
+ * Returns the permanent performance
+ * information for a timeframe.
+ *
+ * ============================================================
+ */
+
+export async function fetchObserverPerformance(
+  address: string,
+  timeframeId?: string
+): Promise<
+  ObserverPerformance | null
+> {
+  const token =
+    await fetchObserverToken(
+      address
+    );
+
+  /*
+   * Specific timeframe.
+   */
+
+  if (
+    timeframeId
+  ) {
+    return (
+      token
+        .timeframeResults?.[
+          timeframeId
+        ]
+        ?.observerPerformance ??
+      null
+    );
+  }
+
+  /*
+   * If no timeframe was supplied,
+   * use the most recent finalized
+   * timeframe.
+   */
+
+  const results =
+    Object.entries(
+      token.timeframeResults ?? {}
+    );
+
+  for (
+    let i =
+      results.length - 1;
+    i >= 0;
+    i--
+  ) {
+    const result =
+      results[i][1];
+
+    if (
+      result.status ===
+        'FINALIZED' &&
+      result.observerPerformance
+    ) {
+      return result.observerPerformance;
+    }
+  }
+
+  return null;
+}
+
+/*
+ * ============================================================
+ * FETCH OBSERVER PATH
+ * ============================================================
+ *
+ * PATH is historical research evidence.
+ *
+ * The frontend does not reconstruct it.
+ *
+ * ============================================================
+ */
+
+export async function fetchObserverPath(
+  address: string
+): Promise<
+  string | null
+> {
+  const token =
+    await fetchObserverToken(
+      address
+    );
+
+  return token.path ??
+    null;
+}
+
+/*
+ * ============================================================
+ * RUN OBSERVER TICK
+ * ============================================================
+ *
+ * Tells the backend to perform one
+ * research observation cycle.
+ *
+ * ============================================================
+ */
+
+export async function runObserverTick() {
+  const response =
+    await fetch(
+      '/api/observer/tick',
+      {
+        method:
+          'POST',
+
+        headers: {
+          'content-type':
+            'application/json',
+        },
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      await response.text()
+    );
+  }
+
+  return response.json();
+}
+
+/*
+ * ============================================================
+ * TELEGRAM STATUS
+ * ============================================================
+ */
+
+export async function fetchTelegramStatus() {
+  const response =
+    await fetch(
+      '/api/telegram/status',
+      {
+        cache:
+          'no-store',
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      await response.text()
+    );
+  }
+
+  return response.json();
+}
+
+/*
+ * ============================================================
+ * TELEGRAM TEST
+ * ============================================================
+ *
+ * Used only to verify the alert channel.
+ *
+ * ============================================================
+ */
+
+export async function testTelegram() {
+  const response =
+    await fetch(
+      '/api/telegram/test',
+      {
+        method:
+          'POST',
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      await response.text()
+    );
+  }
+
+  return response.json();
+}

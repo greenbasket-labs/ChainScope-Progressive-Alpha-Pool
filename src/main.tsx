@@ -34,6 +34,58 @@ const cfg = config as AppConfig;
 
 /*
  * =========================================================
+ * OBSERVER API
+ * =========================================================
+ *
+ * Sends the completed research record to the server.
+ *
+ * ADDITIVE ONLY.
+ *
+ * This does NOT:
+ * - calculate scores
+ * - calculate grades
+ * - change PATH
+ * - change timeframe results
+ * - change Telegram logic
+ *
+ * It only reports the record already produced by process().
+ * =========================================================
+ */
+
+async function recordObserver(
+  token: TokenRecord
+): Promise<void> {
+  try {
+    const response = await fetch(
+      '/api/observer/record',
+      {
+        method: 'POST',
+
+        headers: {
+          'content-type':
+            'application/json',
+        },
+
+        body: JSON.stringify(token),
+      }
+    );
+
+    if (!response.ok) {
+      console.error(
+        'Observer record failed:',
+        await response.text()
+      );
+    }
+  } catch (error) {
+    console.error(
+      'Observer record request failed:',
+      error
+    );
+  }
+}
+
+/*
+ * =========================================================
  * TIMEFRAME GRADE
  * =========================================================
  *
@@ -145,11 +197,7 @@ function timeframePath(
         timeframe.id
       ];
 
-    if (
-      !result ||
-      result.status ===
-        'NOT_OBSERVED'
-    ) {
+    if (!result) {
       path.push('—');
       continue;
     }
@@ -227,33 +275,55 @@ async function sendTelegramAlert(
   token: TokenRecord,
   timeframeId: string,
   passed: number,
-  total: number
+  total: number,
 ) {
-  const key =
-    telegramAlertKey(
-      token.tokenAddress,
-      timeframeId
+  const entryPassed = token.entryScore?.passed ?? null;
+  const entryTotal = token.entryScore?.total ?? null;
+  const grade = timeframeGrade(passed, total);
+
+  /*
+   * =========================================================
+   * FINAL TELEGRAM + MINTLINE GATE
+   * =========================================================
+   *
+   * Entry Grade >= 3/6 AND timeframe A/5, B/4 or C/3.
+   * D/2 never leaves this function.
+   *
+   * This is the single qualification root for Telegram
+   * and the local MINTLINE paper-trading intake.
+   * =========================================================
+   */
+  const allowed =
+    entryPassed !== null &&
+    entryTotal === 6 &&
+    entryPassed >= 3 &&
+    (
+      (grade === 'A' && passed === 5 && total === 5) ||
+      (grade === 'B' && passed === 4 && total === 5) ||
+      (grade === 'C' && passed === 3 && total === 5) ||
+      (grade === 'D' && passed === 2 && total === 5)
     );
 
-  if (
-    telegramAlerted.has(key)
-  ) {
+  if (!allowed) {
+    console.log(
+      'Signal blocked:',
+      token.tokenAddress,
+      timeframeId,
+      `Entry ${entryPassed ?? '—'}/${entryTotal ?? '—'}`,
+      `Timeframe ${passed}/${total}`,
+      `Grade ${grade ?? '—'}`,
+    );
     return;
   }
 
+  const key = telegramAlertKey(token.tokenAddress, timeframeId);
+  if (telegramAlerted.has(key)) return;
   telegramAlerted.add(key);
 
-  const grade =
-    timeframeGrade(
-      passed,
-      total
-    );
+  const path = timeframePath(token.timeframeResults, cfg.timeframes);
 
-  const path =
-    timeframePath(
-      token.timeframeResults,
-      cfg.timeframes
-    );
+  const latest = token.observations.at(-1);
+  const buyPrice = latest?.priceUsd ?? null;
 
   try {
     await sendTelegramTimeframeAlert(
@@ -263,8 +333,12 @@ async function sendTelegramAlert(
       total,
       grade,
       path,
-      token.entryScore?.passed,
-      token.entryScore?.total
+      token.timeframeResults[timeframeId]?.observerEvidence,
+      token.timeframeResults[timeframeId]?.observerPerformance,
+      null,
+      entryPassed ?? undefined,
+      entryTotal ?? undefined,
+      latest?.ageMinutes,
     );
 
     console.log(
@@ -272,26 +346,12 @@ async function sendTelegramAlert(
       token.tokenAddress,
       timeframeId,
       `${passed}/${total}`,
-      grade ??
-        '—',
-      path
+      grade ?? '—',
+      path,
     );
   } catch (error) {
-    /*
-     * Telegram failure must never stop
-     * research, discovery, or pool updates.
-     *
-     * Remove the key so a later poll can retry.
-     */
-
-    telegramAlerted.delete(
-      key
-    );
-
-    console.error(
-      'Telegram alert failed:',
-      error
-    );
+    telegramAlerted.delete(key);
+    console.error('Telegram alert failed:', error);
   }
 }
 
@@ -601,7 +661,10 @@ function App() {
               snapshot,
               cfg.entry_rules,
               cfg.pool
-                .entry_required_score
+                .entry_required_score ??
+              cfg.entry_rules.filter(
+                rule => rule.enabled
+              ).length
             );
 
           /*
@@ -623,6 +686,7 @@ function App() {
            */
 
           if (
+            entry.passed === null ||
             entry.passed < 3
           ) {
             continue;
@@ -678,6 +742,16 @@ function App() {
               snapshot,
               cfg
             );
+
+                     /*
+           * Observer API:
+           *
+           * Send the completed first observation
+           * to the server.
+           */
+          void recordObserver(
+            processed
+          );
 
           /*
            * Telegram:
@@ -806,6 +880,16 @@ function App() {
               snapshot,
               cfg
             );
+
+          /*
+           * Observer API:
+           *
+           * Send the updated research observation
+           * to the server.
+           */
+          void recordObserver(
+            updated
+          );
 
           /*
            * Telegram:
@@ -954,7 +1038,148 @@ function App() {
     }
   };
 
-  /*
+     /*
+   * =========================================================
+   * SERVER POOL COMMAND BRIDGE
+   * =========================================================
+   *
+   * The server does not own the Alpha Pool engine.
+   *
+   * It only publishes control commands.
+   *
+   * This bridge receives those commands and delegates them
+   * to the EXISTING Pool lifecycle:
+   *
+   *   start -> setRunning(true)
+   *   stop  -> setRunning(false)
+   *   tick  -> existing tick()
+   *
+   * No Pool engine is duplicated here.
+   * =========================================================
+   */
+
+  const poolCommandId = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkPoolCommand = async () => {
+      try {
+        const response = await fetch(
+          '/api/pool/status',
+          {
+            cache: 'no-store',
+          }
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const status = await response.json();
+
+        if (cancelled) {
+          return;
+        }
+
+        const commandId =
+          Number(status?.commandId || 0);
+
+        if (
+          !Number.isFinite(commandId) ||
+          commandId <= poolCommandId.current
+        ) {
+          return;
+        }
+
+        poolCommandId.current =
+          commandId;
+
+        const command =
+          status?.requestedAction;
+
+        if (command === 'start') {
+          /*
+           * START is a server-side command. Request the first
+           * Pool cycle through the same command path so the
+           * server can track the cycle lifecycle.
+           *
+           * The existing local polling effect remains the
+           * actual Pool engine. busy.current prevents the
+           * command-driven cycle and local cycle from running
+           * simultaneously.
+           */
+          try {
+            await fetch(
+              '/api/pool/tick',
+              {
+                method: 'POST',
+              }
+            );
+          } catch {
+            /*
+             * Starting the local Pool must not fail just because
+             * the command acknowledgement could not be sent.
+             */
+          }
+
+          setRunning(true);
+          return;
+        }
+
+        if (command === 'stop') {
+          setRunning(false);
+          return;
+        }
+
+        if (command === 'tick') {
+          await tick();
+
+          /*
+           * Tell the server that the existing
+           * Pool tick has actually completed.
+           */
+          await fetch(
+            '/api/pool/tick-complete',
+            {
+              method: 'POST',
+              headers: {
+                'content-type':
+                  'application/json',
+              },
+              body: JSON.stringify({
+                commandId,
+              }),
+            }
+          );
+        }
+      } catch {
+        /*
+         * The Pool must continue operating normally
+         * if the API bridge is temporarily unavailable.
+         */
+      }
+    };
+
+    void checkPoolCommand();
+
+    const bridgeTimer =
+      window.setInterval(
+        () => {
+          void checkPoolCommand();
+        },
+        1000
+      );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(
+        bridgeTimer
+      );
+    };
+  }, []);
+  
+     /*
    * =========================================================
    * START / STOP
    * =========================================================
@@ -989,7 +1214,7 @@ function App() {
       }
     };
   }, [running]);
-
+  
   /*
    * =========================================================
    * RESTORE RESEARCH POOL

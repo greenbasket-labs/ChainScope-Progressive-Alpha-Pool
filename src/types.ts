@@ -31,6 +31,40 @@ export interface AppConfig {
 
   entry_rules: RuleConfig[];
 
+  /*
+   * ============================================================
+   * OBSERVER RULE THRESHOLDS
+   * ============================================================
+   *
+   * These values are configuration only.
+   *
+   * The research engine uses them to determine
+   * observer evidence marks.
+   *
+   * They do NOT replace timeframe scoring,
+   * timeframe grades, or PATH.
+   *
+   * ============================================================
+   */
+
+  rules: {
+    buyPressureRatio: number;
+    balancedLow: number;
+    balancedHigh: number;
+
+    mcAccelerationPct: number;
+
+    volumeSpikeMultiple: number;
+    volumeSustainedMultiple: number;
+    volumeDecayMultiple: number;
+
+    liquiditySpikeMultiple: number;
+    liquidityStablePct: number;
+
+    largeBuyUsd: number;
+    largeBuyMultiple: number;
+  };
+
   timeframes: TimeframeConfig[];
 }
 
@@ -66,6 +100,66 @@ export interface PairSnapshot {
   volumeMcRatio: number | null;
 }
 
+/*
+ * ============================================================
+ * OBSERVER EVIDENCE
+ * ============================================================
+ */
+
+export type ObserverMark =
+  | "MC_RISING"
+  | "MC_FALLING"
+  | "NEW_MC_HIGH"
+  | "MC_ACCELERATION"
+
+  | "BUY_PRESSURE"
+  | "SELL_PRESSURE"
+  | "BUY_SELL_BALANCED"
+  | "BUY_ACTIVITY_CHANGE"
+
+  | "VOLUME_RISING"
+  | "VOLUME_FALLING"
+  | "VOLUME_SPIKE"
+  | "VOLUME_SUSTAINED"
+  | "VOLUME_DECAY"
+
+  | "LIQUIDITY_RISING"
+  | "LIQUIDITY_FALLING"
+  | "LIQUIDITY_SPIKE"
+  | "LIQUIDITY_STABLE"
+  | "LIQUIDITY_RETENTION"
+
+  | "EARLY_PEAK"
+  | "SUSTAINED"
+  | "COLLAPSE"
+  | "FLAT";
+
+export interface ObserverEvidence {
+  mark: ObserverMark;
+  value: number | null;
+  reference: number | null;
+  evidence: string;
+}
+
+export interface ObserverPerformance {
+  entryMarketCap: number | null;
+  peakMarketCap: number | null;
+  peakLiquidity: number | null;
+  peakVolume: number | null;
+
+  athMultiple: number | null;
+  athPercent: number | null;
+  timeToAthMinutes: number | null;
+
+  finalMarketCap: number | null;
+}
+
+/*
+ * ============================================================
+ * OBSERVATION
+ * ============================================================
+ */
+
 export interface Observation
   extends PairSnapshot {
   ageMinutes: number;
@@ -85,15 +179,19 @@ export interface Observation
   peakVolume: number | null;
 
   timeframeId: string;
+
+  /*
+   * ADDITIVE OBSERVER DATA
+   */
+
+  observerEvidence: ObserverEvidence[];
+
+  observerPerformance: ObserverPerformance;
 }
 
 /*
  * ============================================================
  * SCORE RESULT
- * ============================================================
- *
- * Kept unchanged for entry scoring and compatibility.
- *
  * ============================================================
  */
 
@@ -108,24 +206,6 @@ export interface ScoreResult {
  * ============================================================
  * PERMANENT TIMEFRAME RESULT
  * ============================================================
- *
- * This is different from a normal ScoreResult.
- *
- * A timeframe can have one of two permanent states:
- *
- * FINALIZED
- *     We actually observed the token during the timeframe
- *     and finalized its research result.
- *
- * NOT_OBSERVED
- *     The token entered after this timeframe had already
- *     passed, so we have no evidence for that timeframe.
- *
- * IMPORTANT:
- *
- * We never invent a score for NOT_OBSERVED.
- *
- * ============================================================
  */
 
 export type TimeframeResultStatus =
@@ -135,27 +215,10 @@ export type TimeframeResultStatus =
 export interface TimeframeResult {
   status: TimeframeResultStatus;
 
-  /*
-   * Score information.
-   *
-   * For FINALIZED:
-   *
-   * passed / total / required / qualified
-   * contain the actual research result.
-   *
-   * For NOT_OBSERVED:
-   *
-   * these values are null.
-   */
-
   passed: number | null;
   total: number | null;
   required: number | null;
   qualified: boolean | null;
-
-  /*
-   * A/B/C/D is assigned ONLY when FINALIZED.
-   */
 
   grade:
     | "A"
@@ -164,14 +227,15 @@ export interface TimeframeResult {
     | "D"
     | null;
 
+  finalizedAt: number | null;
+
   /*
-   * When this research timeframe became
-   * permanently finalized.
-   *
-   * null for NOT_OBSERVED.
+   * ADDITIVE OBSERVER DATA
    */
 
-  finalizedAt: number | null;
+  observerEvidence?: ObserverEvidence[];
+
+  observerPerformance?: ObserverPerformance;
 }
 
 /*
@@ -192,23 +256,6 @@ export interface TokenRecord {
   entryScore: ScoreResult | null;
 
   observations: Observation[];
-
-  /*
-   * ==========================================================
-   * PERMANENT RESEARCH EVIDENCE
-   * ==========================================================
-   *
-   * IMPORTANT:
-   *
-   * A timeframe is inserted here only when:
-   *
-   * 1. It has been permanently finalized, OR
-   * 2. It is permanently known to be NOT_OBSERVED.
-   *
-   * Future timeframes do not appear until researched.
-   *
-   * ==========================================================
-   */
 
   timeframeResults:
     Record<

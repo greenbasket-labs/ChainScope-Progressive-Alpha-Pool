@@ -3,49 +3,34 @@
  * CHAINSCOPE TELEGRAM ALERT ENGINE
  * ============================================================
  *
- * Frontend alert helper.
+ * This file reports finalized research.
  *
- * IMPORTANT:
- *
- * This file does NOT:
+ * It does NOT:
  *
  * - calculate timeframe grades
- * - invent missing timeframe grades
+ * - calculate PATH
+ * - invent missing timeframe results
  * - backfill old timeframes
- * - change finalized research
- * - recalculate the historical PATH
- * - contain Express
- * - contain Telegram bot token
- * - contain Telegram chat ID
+ * - modify finalized research
  *
- * The research engine is responsible for:
+ * The research engine remains responsible for:
  *
- * 1. Observing the token
- * 2. Finalizing each timeframe
- * 3. Permanently storing its grade
- * 4. Building the permanent research journey
+ * - observation
+ * - timeframe finalization
+ * - grade
+ * - permanent PATH
+ * - observer evidence
+ * - observer performance
  *
- * This file ONLY reports the finalized result.
- *
- * ============================================================
- *
- * SERVER:
- *
- * POST /api/telegram/alert
- *
- * Body:
- *
- * {
- *   message: "...",
- *   ca: "FULL TOKEN ADDRESS"
- * }
- *
- * The server creates the Telegram:
- *
- * 📋 COPY CA
+ * This file only formats and sends the result.
  *
  * ============================================================
  */
+
+import type {
+  ObserverEvidence,
+  ObserverPerformance,
+} from "./types";
 
 /*
  * ============================================================
@@ -69,13 +54,13 @@ export async function sendTelegramAlert(
 ): Promise<void> {
   const response =
     await fetch(
-      '/api/telegram/alert',
+      "/api/telegram/alert",
       {
-        method: 'POST',
+        method: "POST",
 
         headers: {
-          'content-type':
-            'application/json',
+          "content-type":
+            "application/json",
         },
 
         body:
@@ -113,9 +98,167 @@ export async function sendTelegramAlert(
   if (!data?.ok) {
     throw new Error(
       data?.error ||
-        'Telegram alert failed'
+        "Telegram alert failed"
     );
   }
+}
+
+/*
+ * ============================================================
+ * FORMAT NUMBER
+ * ============================================================
+ */
+
+function numberValue(
+  value: number | null | undefined,
+  decimals = 2
+): string {
+  if (
+    value === null ||
+    value === undefined ||
+    !Number.isFinite(value)
+  ) {
+    return "—";
+  }
+
+  return value.toFixed(decimals);
+}
+
+/*
+ * ============================================================
+ * FORMAT MONEY
+ * ============================================================
+ */
+
+function money(
+  value: number | null | undefined
+): string {
+  if (
+    value === null ||
+    value === undefined ||
+    !Number.isFinite(value)
+  ) {
+    return "—";
+  }
+
+  return `$${value.toLocaleString(
+    undefined,
+    {
+      maximumFractionDigits: 2,
+    }
+  )}`;
+}
+
+/*
+ * ============================================================
+ * FORMAT OBSERVER EVIDENCE
+ * ============================================================
+ *
+ * IMPORTANT:
+ *
+ * Evidence is displayed exactly as evidence.
+ *
+ * No new scoring is performed here.
+ *
+ * ============================================================
+ */
+
+function formatEvidence(
+  evidence:
+    | ObserverEvidence[]
+    | undefined
+): string[] {
+  if (
+    !evidence ||
+    evidence.length === 0
+  ) {
+    return [
+      "No observer evidence",
+    ];
+  }
+
+  return evidence.map(
+    item =>
+      `✓ ${item.mark}${
+        item.evidence
+          ? ` — ${item.evidence}`
+          : ""
+      }`
+  );
+}
+
+/*
+ * ============================================================
+ * FORMAT OBSERVER PERFORMANCE
+ * ============================================================
+ */
+
+function formatPerformance(
+  performance:
+    | ObserverPerformance
+    | undefined
+): string[] {
+  if (!performance) {
+    return [
+      `Entry MC`,
+      `Peak MC`,
+      `Peak liquidity`,
+      `Peak volume`,
+      `ATH multiple`,
+      `ATH %`,
+      `Time to ATH`,
+      `Final MC`,
+    ];
+  }
+
+  return [
+    `Entry MC: ${money(
+      performance.entryMarketCap
+    )}`,
+
+    `Peak MC: ${money(
+      performance.peakMarketCap
+    )}`,
+
+    `Peak liquidity: ${money(
+      performance.peakLiquidity
+    )}`,
+
+    `Peak volume: ${money(
+      performance.peakVolume
+    )}`,
+
+    `ATH multiple: ${
+      performance.athMultiple === null
+        ? "—"
+        : `${numberValue(
+            performance.athMultiple,
+            2
+          )}x`
+    }`,
+
+    `ATH %: ${
+      performance.athPercent === null
+        ? "—"
+        : `${numberValue(
+            performance.athPercent,
+            2
+          )}%`
+    }`,
+
+    `Time to ATH: ${
+      performance.timeToAthMinutes === null
+        ? "—"
+        : `${numberValue(
+            performance.timeToAthMinutes,
+            2
+          )}m`
+    }`,
+
+    `Final MC: ${money(
+      performance.finalMarketCap
+    )}`,
+  ];
 }
 
 /*
@@ -123,63 +266,116 @@ export async function sendTelegramAlert(
  * BUILD FINALIZED TIMEFRAME ALERT
  * ============================================================
  *
- * IMPORTANT:
+ * Grade and PATH are supplied by the permanent
+ * research record.
  *
- * `grade` MUST come from the finalized research record.
- *
- * `path` MUST come from the permanent research journey.
- *
- * This function does NOT calculate either one.
+ * This function does NOT calculate them.
  *
  * ============================================================
  */
 
 export function buildTimeframeAlert(
   tokenAddress: string,
+  tokenSymbol: string | null,
   timeframeId: string,
   passed: number,
   total: number,
   grade: string | null,
   path: string | null,
+  evidence:
+    | ObserverEvidence[]
+    | undefined,
+  performance:
+    | ObserverPerformance
+    | undefined,
   entryPassed?: number,
-  entryTotal?: number
+  entryTotal?: number,
+  researchAge?: number
 ): string {
+  const symbol =
+    tokenSymbol
+      ? `$${tokenSymbol}`
+      : tokenAddress;
+
+  const entry =
+    entryPassed !== undefined &&
+    entryTotal !== undefined
+      ? `${entryPassed}/${entryTotal}`
+      : "—";
+
+  const evidenceLines =
+    formatEvidence(
+      evidence
+    );
+
+  const performanceLines =
+    formatPerformance(
+      performance
+    );
+
   return [
-    '🚨 ChainScope Timeframe Alert',
+    "🔬 ChainScope Research Alert",
 
-    '',
+    "",
 
-    `Token: ${tokenAddress}`,
+    `Token: ${symbol}`,
 
-    `Timeframe: ${timeframeId}`,
+    `CA: ${tokenAddress}`,
 
-    `Score: ${passed}/${total}`,
+    "",
 
-    `Grade: ${
-      grade ??
-      '—'
-    }`,
+    "Entry",
 
-    '',
+    entry,
 
-    `PATH: ${
-      path ??
-      '—'
-    }`,
+    "",
 
-    '',
+    "Timeframe",
 
-    `Entry grade: ${
-      entryPassed !== undefined &&
-      entryTotal !== undefined
-        ? `${entryPassed}/${entryTotal}`
-        : '—'
-    }`,
+    timeframeId,
 
-    '',
+    "",
 
-    `Time: ${new Date().toLocaleString()}`,
-  ].join('\n');
+    "Score",
+
+    `${passed}/${total}`,
+
+    "",
+
+    "Grade",
+
+    grade ?? "—",
+
+    "",
+
+    "PATH",
+
+    path ?? "—",
+
+    "",
+
+    "Evidence",
+
+    ...evidenceLines,
+
+    "",
+
+    "Performance",
+
+    ...performanceLines,
+
+    "",
+
+    "Research Age",
+
+    researchAge ===
+      undefined
+      ? "—"
+      : `${numberValue(
+          researchAge,
+          1
+        )}m`,
+  ].join("\n");
 }
 
 /*
@@ -187,19 +383,41 @@ export function buildTimeframeAlert(
  * SEND FINALIZED TIMEFRAME ALERT
  * ============================================================
  *
- * This function reports ONE finalized timeframe.
+ * Reports ONE finalized timeframe.
  *
  * Example:
  *
- * Timeframe: 30–40m
- * Score: 5/5
- * Grade: A
+ * 🔬 ChainScope Research Alert
  *
- * PATH:
- * A → B → A
+ * Token: $SYMBOL
+ * CA: FULL ADDRESS
  *
- * The PATH is historical evidence already produced
- * by the research engine.
+ * Entry
+ * 4/6
+ *
+ * Timeframe
+ * 30–40m
+ *
+ * Score
+ * 4/5
+ *
+ * Grade
+ * A
+ *
+ * PATH
+ * B → A → A → B
+ *
+ * Evidence
+ * ✓ MC_RISING — MC Growth=31.42%
+ * ✓ LIQUIDITY_RISING — Liquidity Growth=8.17%
+ *
+ * Performance
+ * Entry MC: $...
+ * Peak MC: $...
+ * ...
+ *
+ * Research Age
+ * 34.2m
  *
  * ============================================================
  */
@@ -211,45 +429,53 @@ export async function sendTimeframeAlert(
   total: number,
   grade: string | null,
   path: string | null,
+  evidence:
+    | ObserverEvidence[]
+    | undefined,
+  performance:
+    | ObserverPerformance
+    | undefined,
+  tokenSymbol: string | null = null,
   entryPassed?: number,
-  entryTotal?: number
+  entryTotal?: number,
+  researchAge?: number
 ): Promise<void> {
   /*
-   * Do not calculate grade here.
+   * DO NOT calculate grade.
    *
-   * Do not calculate path here.
+   * DO NOT calculate PATH.
    *
-   * They must already be finalized by
-   * the research engine.
+   * Both must already be finalized
+   * by the research engine.
    */
 
   const message =
     buildTimeframeAlert(
       tokenAddress,
+      tokenSymbol,
       timeframeId,
       passed,
       total,
       grade,
       path,
+      evidence,
+      performance,
       entryPassed,
-      entryTotal
+      entryTotal,
+      researchAge
     );
 
   await sendTelegramAlert({
     message,
 
     /*
-     * ========================================================
-     * FULL TOKEN CA
-     * ========================================================
+     * FULL TOKEN CA.
      *
      * Never shorten this.
      *
      * The server uses it for:
      *
      * 📋 COPY CA
-     *
-     * ========================================================
      */
 
     ca:

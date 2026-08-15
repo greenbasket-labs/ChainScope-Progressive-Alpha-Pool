@@ -1,6 +1,9 @@
 import type {
   AppConfig,
   Observation,
+  ObserverEvidence,
+  ObserverMark,
+  ObserverPerformance,
   PairSnapshot,
   RuleConfig,
   ScoreResult,
@@ -13,15 +16,6 @@ import type {
  * ============================================================
  * GROWTH
  * ============================================================
- *
- * Growth is measured against a stable baseline.
- *
- * Example:
- *
- * baseline MC = 100,000
- * current MC  = 150,000
- *
- * growth = +50%
  */
 
 export const growth = (
@@ -46,8 +40,6 @@ export const growth = (
  * ============================================================
  * PULLBACK
  * ============================================================
- *
- * Pullback is measured from the highest observed value.
  */
 
 export const pullback = (
@@ -111,9 +103,7 @@ export const compare = (
  * TIMEFRAME SCORE
  * ============================================================
  *
- * Score is evidence.
- *
- * It NEVER removes a token from the pool.
+ * EXISTING LOGIC — PRESERVED
  */
 
 export function score(
@@ -165,21 +155,7 @@ export function score(
  * TIMEFRAME GRADE
  * ============================================================
  *
- * The grade is derived from the FINAL score.
- *
- * 5/5 = A
- * 4/5 = B
- * 3/5 = C
- * 2/5 = D
- *
- * 0/5 and 1/5 have no research grade.
- *
- * IMPORTANT:
- *
- * This function is called only when a timeframe
- * is being permanently finalized.
- *
- * ============================================================
+ * EXISTING LOGIC — PRESERVED
  */
 
 export function timeframeGrade(
@@ -218,6 +194,8 @@ export function timeframeGrade(
  * ============================================================
  * ENTRY SCORE
  * ============================================================
+ *
+ * EXISTING LOGIC — PRESERVED
  */
 
 export function entryScore(
@@ -396,6 +374,623 @@ function calculatePeaks(
 
 /*
  * ============================================================
+ * OBSERVER HELPERS
+ * ============================================================
+ *
+ * ADDITIVE ONLY
+ *
+ * These functions produce evidence.
+ *
+ * They do NOT alter:
+ *
+ * - entry score
+ * - timeframe score
+ * - timeframe grade
+ * - PATH
+ * - permanent timeframe state
+ *
+ * ============================================================
+ */
+
+function observerNumber(
+  value: number | null | undefined
+): number | null {
+  return typeof value === "number" &&
+    Number.isFinite(value)
+    ? value
+    : null;
+}
+
+function observerRatio(
+  current: number | null,
+  previous: number | null
+): number | null {
+  if (
+    current === null ||
+    previous === null ||
+    previous === 0
+  ) {
+    return null;
+  }
+
+  return current / previous;
+}
+
+function addObserverMark(
+  evidence: ObserverEvidence[],
+  mark: ObserverMark,
+  value: number | null,
+  reference: number | null,
+  text: string
+) {
+  evidence.push({
+    mark,
+    value,
+    reference,
+    evidence: text,
+  });
+}
+
+/*
+ * ============================================================
+ * BUILD OBSERVER EVIDENCE
+ * ============================================================
+ */
+
+function buildObserverEvidence(
+  snapshot: PairSnapshot,
+  previous: Observation | null,
+  baseline: Observation | null,
+  peaks: {
+    marketCap: number | null;
+    liquidity: number | null;
+    volume: number | null;
+  },
+  config: AppConfig
+): ObserverEvidence[] {
+  const evidence: ObserverEvidence[] = [];
+
+  const currentMC =
+    observerNumber(
+      snapshot.marketCap
+    );
+
+  const previousMC =
+    observerNumber(
+      previous?.marketCap
+    );
+
+  const currentLiquidity =
+    observerNumber(
+      snapshot.liquidityUsd
+    );
+
+  const previousLiquidity =
+    observerNumber(
+      previous?.liquidityUsd
+    );
+
+  const currentVolume =
+    observerNumber(
+      snapshot.volume
+    );
+
+  const previousVolume =
+    observerNumber(
+      previous?.volume
+    );
+
+  /*
+   * ==========================================================
+   * MARKET CAP
+   * ==========================================================
+   */
+
+  if (
+    currentMC !== null &&
+    previousMC !== null
+  ) {
+    if (currentMC > previousMC) {
+      const pct =
+        growth(
+          currentMC,
+          previousMC
+        );
+
+      addObserverMark(
+        evidence,
+        "MC_RISING",
+        pct,
+        0,
+        `MC Growth=${pct?.toFixed(2)}%`
+      );
+    }
+
+    if (currentMC < previousMC) {
+      const pct =
+        growth(
+          currentMC,
+          previousMC
+        );
+
+      addObserverMark(
+        evidence,
+        "MC_FALLING",
+        pct,
+        0,
+        `MC Growth=${pct?.toFixed(2)}%`
+      );
+    }
+  }
+
+  if (
+    currentMC !== null &&
+    peaks.marketCap !== null &&
+    currentMC >= peaks.marketCap
+  ) {
+    addObserverMark(
+      evidence,
+      "NEW_MC_HIGH",
+      currentMC,
+      peaks.marketCap,
+      `MC=${currentMC}; previous peak=${peaks.marketCap}`
+    );
+  }
+
+  if (
+    currentMC !== null &&
+    baseline !== null &&
+    baseline.marketCap !== null
+  ) {
+    const mcGrowth =
+      growth(
+        currentMC,
+        baseline.marketCap
+      );
+
+    const acceleration =
+      config.rules.mcAccelerationPct;
+
+    if (
+      mcGrowth !== null &&
+      mcGrowth >= acceleration
+    ) {
+      addObserverMark(
+        evidence,
+        "MC_ACCELERATION",
+        mcGrowth,
+        acceleration,
+        `MC Growth=${mcGrowth.toFixed(2)}%`
+      );
+    }
+  }
+
+  /*
+   * ==========================================================
+   * BUY / SELL
+   * ==========================================================
+   */
+
+  const buys =
+    observerNumber(
+      snapshot.buys
+    );
+
+  const sells =
+    observerNumber(
+      snapshot.sells
+    );
+
+  const previousBuys =
+    observerNumber(
+      previous?.buys
+    );
+
+  if (
+    buys !== null &&
+    sells !== null &&
+    sells > 0
+  ) {
+    const ratio =
+      buys / sells;
+
+    if (
+      ratio >=
+      config.rules.buyPressureRatio
+    ) {
+      addObserverMark(
+        evidence,
+        "BUY_PRESSURE",
+        ratio,
+        config.rules.buyPressureRatio,
+        `Buy/Sell ratio=${ratio.toFixed(3)}`
+      );
+    }
+
+    if (
+      ratio <=
+      1 /
+        config.rules.buyPressureRatio
+    ) {
+      addObserverMark(
+        evidence,
+        "SELL_PRESSURE",
+        ratio,
+        1 /
+          config.rules.buyPressureRatio,
+        `Buy/Sell ratio=${ratio.toFixed(3)}`
+      );
+    }
+
+    if (
+      ratio >=
+        config.rules.balancedLow &&
+      ratio <=
+        config.rules.balancedHigh
+    ) {
+      addObserverMark(
+        evidence,
+        "BUY_SELL_BALANCED",
+        ratio,
+        1,
+        `Buy/Sell ratio=${ratio.toFixed(3)}`
+      );
+    }
+  }
+
+  if (
+    buys !== null &&
+    previousBuys !== null &&
+    buys !== previousBuys
+  ) {
+    addObserverMark(
+      evidence,
+      "BUY_ACTIVITY_CHANGE",
+      buys - previousBuys,
+      previousBuys,
+      `Buys=${previousBuys} → ${buys}`
+    );
+  }
+
+  /*
+   * ==========================================================
+   * VOLUME
+   * ==========================================================
+   */
+
+  if (
+    currentVolume !== null &&
+    previousVolume !== null
+  ) {
+    const volumePct =
+      growth(
+        currentVolume,
+        previousVolume
+      );
+
+    const volumeRatio =
+      observerRatio(
+        currentVolume,
+        previousVolume
+      );
+
+    if (
+      volumePct !== null &&
+      volumePct > 0
+    ) {
+      addObserverMark(
+        evidence,
+        "VOLUME_RISING",
+        volumePct,
+        0,
+        `Volume Growth=${volumePct.toFixed(2)}%`
+      );
+    }
+
+    if (
+      volumePct !== null &&
+      volumePct < 0
+    ) {
+      addObserverMark(
+        evidence,
+        "VOLUME_FALLING",
+        volumePct,
+        0,
+        `Volume Growth=${volumePct.toFixed(2)}%`
+      );
+    }
+
+    if (
+      volumeRatio !== null &&
+      volumeRatio >=
+        config.rules.volumeSpikeMultiple
+    ) {
+      addObserverMark(
+        evidence,
+        "VOLUME_SPIKE",
+        volumeRatio,
+        config.rules.volumeSpikeMultiple,
+        `Volume ratio=${volumeRatio.toFixed(3)}`
+      );
+    } else if (
+      volumeRatio !== null &&
+      volumeRatio >=
+        config.rules.volumeSustainedMultiple
+    ) {
+      addObserverMark(
+        evidence,
+        "VOLUME_SUSTAINED",
+        volumeRatio,
+        config.rules.volumeSustainedMultiple,
+        `Volume ratio=${volumeRatio.toFixed(3)}`
+      );
+    } else if (
+      volumeRatio !== null &&
+      volumeRatio <=
+        config.rules.volumeDecayMultiple
+    ) {
+      addObserverMark(
+        evidence,
+        "VOLUME_DECAY",
+        volumeRatio,
+        config.rules.volumeDecayMultiple,
+        `Volume ratio=${volumeRatio.toFixed(3)}`
+      );
+    }
+  }
+
+  /*
+   * ==========================================================
+   * LIQUIDITY
+   * ==========================================================
+   */
+
+  if (
+    currentLiquidity !== null &&
+    previousLiquidity !== null
+  ) {
+    const liquidityPct =
+      growth(
+        currentLiquidity,
+        previousLiquidity
+      );
+
+    const liquidityRatio =
+      observerRatio(
+        currentLiquidity,
+        previousLiquidity
+      );
+
+    if (
+      liquidityPct !== null &&
+      liquidityPct > 0
+    ) {
+      addObserverMark(
+        evidence,
+        "LIQUIDITY_RISING",
+        liquidityPct,
+        0,
+        `Liquidity Growth=${liquidityPct.toFixed(2)}%`
+      );
+    }
+
+    if (
+      liquidityPct !== null &&
+      liquidityPct < 0
+    ) {
+      addObserverMark(
+        evidence,
+        "LIQUIDITY_FALLING",
+        liquidityPct,
+        0,
+        `Liquidity Growth=${liquidityPct.toFixed(2)}%`
+      );
+    }
+
+    if (
+      liquidityRatio !== null &&
+      liquidityRatio >=
+        config.rules.liquiditySpikeMultiple
+    ) {
+      addObserverMark(
+        evidence,
+        "LIQUIDITY_SPIKE",
+        liquidityRatio,
+        config.rules.liquiditySpikeMultiple,
+        `Liquidity ratio=${liquidityRatio.toFixed(3)}`
+      );
+    }
+
+    if (
+      liquidityPct !== null &&
+      Math.abs(liquidityPct) <=
+        config.rules.liquidityStablePct
+    ) {
+      addObserverMark(
+        evidence,
+        "LIQUIDITY_STABLE",
+        liquidityPct,
+        config.rules.liquidityStablePct,
+        `Liquidity change=${liquidityPct.toFixed(2)}%`
+      );
+    }
+
+    if (
+      liquidityRatio !== null &&
+      liquidityRatio >= 0.95 &&
+      liquidityRatio <= 1.05
+    ) {
+      addObserverMark(
+        evidence,
+        "LIQUIDITY_RETENTION",
+        liquidityRatio,
+        1,
+        `Liquidity retained=${(
+          liquidityRatio * 100
+        ).toFixed(2)}%`
+      );
+    }
+  }
+
+  /*
+   * ==========================================================
+   * ACTIVITY STATE
+   * ==========================================================
+   */
+
+  if (
+    currentVolume !== null &&
+    previousVolume !== null
+  ) {
+    const volumePct =
+      growth(
+        currentVolume,
+        previousVolume
+      );
+
+    if (
+      volumePct !== null &&
+      volumePct <= -50
+    ) {
+      addObserverMark(
+        evidence,
+        "COLLAPSE",
+        volumePct,
+        -50,
+        `Volume Growth=${volumePct.toFixed(2)}%`
+      );
+    } else if (
+      volumePct !== null &&
+      volumePct >= 50
+    ) {
+      addObserverMark(
+        evidence,
+        "EARLY_PEAK",
+        volumePct,
+        50,
+        `Volume Growth=${volumePct.toFixed(2)}%`
+      );
+    } else if (
+      volumePct !== null &&
+      Math.abs(volumePct) < 10
+    ) {
+      addObserverMark(
+        evidence,
+        "FLAT",
+        volumePct,
+        10,
+        `Volume Growth=${volumePct.toFixed(2)}%`
+      );
+    } else if (
+      volumePct !== null
+    ) {
+      addObserverMark(
+        evidence,
+        "SUSTAINED",
+        volumePct,
+        10,
+        `Volume Growth=${volumePct.toFixed(2)}%`
+      );
+    }
+  }
+
+  return evidence;
+}
+
+/*
+ * ============================================================
+ * OBSERVER PERFORMANCE
+ * ============================================================
+ *
+ * ADDITIVE
+ *
+ * Uses the same observation history.
+ * No separate market-data fetch is introduced here.
+ *
+ * ============================================================
+ */
+
+function calculateObserverPerformance(
+  snapshot: PairSnapshot,
+  previous: Observation | null,
+  baseline: Observation | null,
+  peaks: {
+    marketCap: number | null;
+    liquidity: number | null;
+    volume: number | null;
+  }
+): ObserverPerformance {
+  const entryMarketCap =
+    observerNumber(
+      baseline?.marketCap ??
+      previous?.marketCap ??
+      snapshot.marketCap
+    );
+
+  const peakMarketCap =
+    peaks.marketCap;
+
+  const athMultiple =
+    entryMarketCap !== null &&
+    entryMarketCap > 0 &&
+    peakMarketCap !== null
+      ? peakMarketCap /
+        entryMarketCap
+      : null;
+
+  const athPercent =
+    athMultiple !== null
+      ? (
+          athMultiple - 1
+        ) * 100
+      : null;
+
+  let timeToAthMinutes:
+    number | null = null;
+
+  if (
+    peakMarketCap !== null &&
+    snapshot.marketCap !== null &&
+    snapshot.fetchedAt !== null
+  ) {
+    const currentAge =
+      snapshot.pairCreatedAt === null
+        ? null
+        : Math.max(
+            0,
+            (
+              snapshot.fetchedAt -
+              snapshot.pairCreatedAt
+            ) / 60000
+          );
+
+    if (
+      currentAge !== null &&
+      peakMarketCap >=
+        snapshot.marketCap
+    ) {
+      timeToAthMinutes =
+        currentAge;
+    }
+  }
+
+  return {
+    entryMarketCap,
+    peakMarketCap,
+    peakLiquidity:
+      peaks.liquidity,
+    peakVolume:
+      peaks.volume,
+    athMultiple,
+    athPercent,
+    timeToAthMinutes,
+    finalMarketCap:
+      snapshot.marketCap,
+  };
+}
+
+/*
+ * ============================================================
  * MAKE OBSERVATION
  * ============================================================
  */
@@ -485,6 +1080,29 @@ export function makeObservation(
     );
 
   /*
+   * ==========================================================
+   * ADDITIVE OBSERVER LAYER
+   * ==========================================================
+   */
+
+  const observerEvidence =
+    buildObserverEvidence(
+      snapshot,
+      previous,
+      baseline,
+      peaks,
+      config
+    );
+
+  const observerPerformance =
+    calculateObserverPerformance(
+      snapshot,
+      previous,
+      baseline,
+      peaks
+    );
+
+  /*
    * OBSERVATION
    */
 
@@ -531,12 +1149,30 @@ export function makeObservation(
     timeframeId:
       timeframe?.id ??
       "outside",
+
+    /*
+     * NEW — Observer evidence
+     */
+
+    observerEvidence,
+
+    /*
+     * NEW — Observer performance
+     */
+
+    observerPerformance,
   };
 }
 
 /*
  * ============================================================
  * CREATE FINALIZED TIMEFRAME RESULT
+ * ============================================================
+ *
+ * EXISTING SCORE / GRADE LOGIC PRESERVED.
+ *
+ * Observer evidence is added alongside it.
+ *
  * ============================================================
  */
 
@@ -575,6 +1211,16 @@ function finalizeTimeframe(
       ),
 
     finalizedAt,
+
+    /*
+     * ADDITIVE OBSERVER DATA
+     */
+
+    observerEvidence:
+      observation.observerEvidence,
+
+    observerPerformance:
+      observation.observerPerformance,
   };
 }
 
@@ -583,19 +1229,7 @@ function finalizeTimeframe(
  * MARK PREVIOUS TIMEFRAMES AS NOT OBSERVED
  * ============================================================
  *
- * This happens ONLY when we first observe a token
- * after one or more research windows have already passed.
- *
- * Example:
- *
- * Token first enters at 27m.
- *
- * 10–15m = NOT_OBSERVED
- * 20–30m = currently being observed
- *
- * We never invent grades for the first two windows.
- *
- * ============================================================
+ * EXISTING LOGIC — PRESERVED
  */
 
 function markEarlierTimeframesNotObserved(
@@ -622,11 +1256,6 @@ function markEarlierTimeframesNotObserved(
     ) {
       break;
     }
-
-    /*
-     * Never overwrite an existing
-     * permanent result.
-     */
 
     if (
       next[frame.id]
@@ -666,20 +1295,10 @@ function markEarlierTimeframesNotObserved(
  * PROCESS TOKEN
  * ============================================================
  *
- * IMPORTANT:
+ * EXISTING PERMANENT TIMEFRAME LOGIC — PRESERVED
  *
- * A timeframe is finalized exactly once.
- *
- * Once FINALIZED:
- *
- * - score cannot change
- * - grade cannot change
- * - finalizedAt cannot change
- *
- * A token entering late gets permanent
- * NOT_OBSERVED records for earlier windows.
- *
- * No historical score is invented.
+ * Observer data is carried through the same observation
+ * and finalized timeframe record.
  *
  * ============================================================
  */
@@ -754,11 +1373,6 @@ export function process(
    * ==========================================================
    * FIRST OBSERVATION / LATE ENTRY
    * ==========================================================
-   *
-   * If this is the first meaningful observation,
-   * permanently mark every earlier timeframe
-   * as NOT_OBSERVED.
-   * ==========================================================
    */
 
   if (
@@ -777,13 +1391,6 @@ export function process(
    * ==========================================================
    * TIMEFRAME TRANSITION
    * ==========================================================
-   *
-   * If we moved from one timeframe into another,
-   * the previous timeframe is now finished.
-   *
-   * We finalize it using the LAST observation
-   * that actually belonged to that timeframe.
-   * ==========================================================
    */
 
   if (
@@ -797,14 +1404,6 @@ export function process(
           frame.id ===
           previous.timeframeId
       );
-
-    /*
-     * Only finalize if:
-     *
-     * - previous timeframe is real
-     * - previous timeframe has not already
-     *   been finalized
-     */
 
     if (
       previousTimeframe &&
@@ -826,11 +1425,6 @@ export function process(
   /*
    * ==========================================================
    * EXPIRATION
-   * ==========================================================
-   *
-   * If maximum research age has been reached,
-   * finalize the last observed timeframe before
-   * marking the token EXPIRED.
    * ==========================================================
    */
 
