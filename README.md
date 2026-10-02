@@ -1,29 +1,45 @@
 # ChainScope — Progressive Alpha Pool
 
-Small standalone research pool: **DexScreener discovery → configurable entry filters → progressive observation → per-timeframe rule score → continue → expire**.
+**A standalone research component for observing newly discovered Solana tokens over time.**
 
-A timeframe can score below its required score without removing the token. The token remains active and moves to the next timeframe. Only the maximum research age expires it.
+ChainScope is a broader research direction focused on collecting blockchain/token behavior as evidence. This repository contains one small, configurable research component rather than the complete ChainScope platform.
+
+## Research Pipeline
+
+```text
+DexScreener discovery
+        ↓
+Configurable entry filters
+        ↓
+Progressive observation
+        ↓
+Per-timeframe rule scoring
+        ↓
+Continue observation / expire
+```
+
+The important design choice is that a token is **not automatically discarded simply because it scores below a timeframe threshold**. It can continue into the next observation stage until the configured research age expires.
 
 ## Configuration
 
-Edit `src/config/default-config.json`.
+Edit `src/config/default-config.json` to control:
 
-- `pool.polling_interval_seconds`
-- `pool.maximum_research_minutes`
-- `entry_rules`
-- each timeframe's `required_score`
-- each timeframe's enabled rules and values
+- polling interval
+- maximum research age
+- entry rules
+- timeframe requirements
+- enabled rules and values
 
-The starter timeframe values are seeded from the research ranges supplied for this project. They are configuration, not evaluator constants. Where the research supplied `?`, the starter config uses neutral `0` values rather than inventing missing data.
+Starter values are configuration, not hardcoded research conclusions. Where the research specification did not provide a value, the starter configuration uses a neutral `0` rather than inventing one.
 
-## Local development
+## Run Locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-For the production-style DexScreener proxy:
+For the production-style proxy:
 
 ```bash
 npm run build
@@ -32,12 +48,34 @@ npm start
 
 ## Render
 
-Build command: `npm install && npm run build`
+Build command:
 
-Start command: `npm start`
+```bash
+npm install && npm run build
+```
 
-The server uses DexScreener only and needs no database or authentication.
+Start command:
 
-## Scope
+```bash
+npm start
+```
 
-No trading, wallets, AI, Telegram, portfolio, journal, scoring model beyond configured rule counts, or other providers.
+## Deliberate Scope
+
+This component does **not** include:
+- live trading
+- wallets
+- AI
+- Telegram
+- portfolio management
+- journaling
+- additional data providers
+- a broader scoring model beyond configured rule counts
+
+That narrow scope is intentional: the component is for research observation, not an all-in-one trading platform.
+
+## Relationship to ChainScope
+
+Think of this repository as one reusable research engine/component inside the larger ChainScope direction.
+
+**Evidence first. Conclusions later.**
